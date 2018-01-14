@@ -37,7 +37,7 @@ public:
   }
 };
 
-class AndersenPass: public ModulePass {
+class ResolveIndiCallPass: public ModulePass {
 public:
   Module* _m = nullptr;
   // All points-to sets map
@@ -47,7 +47,8 @@ public:
 public:
   static char ID;
 
-  AndersenPass(): ModulePass(ID) {
+  ResolveIndiCallPass(): ModulePass(ID) {
+      errs() << "Constructs ResolveIndiCallPass.\n";
       initialize();
   }
 
@@ -58,6 +59,9 @@ public:
 
   void initPts(Module& M) {
       for (auto& F: M) {
+          if (F.isIntrinsic()) {
+              continue;
+          }
           std::set<Value*>* singleton_set = new std::set<Value*>();
           singleton_set->insert(&F);
           _pts[&F] = singleton_set;
@@ -116,7 +120,46 @@ public:
       }
   }
 
-  void doFunction(Function& F) {
+  void doCall(Function& F) {
+      for (auto& BB: F) {
+          for (auto &I: BB) {
+              if (CallSite CS = CallSite(&I)) {
+                  Function* callee = CS.getCalledFunction();
+                  if (!callee || callee->isIntrinsic()) {
+                      continue;
+                  }
+
+                  errs() << "f: " << callee->getName() << '\n';
+                  int arg_num = CS.getNumArgOperands();
+                  int param_num = callee->getArgumentList().size();
+                  assert(arg_num == param_num);
+
+                  Function::arg_iterator PI = callee->arg_begin(), PE = callee->arg_end();
+                  CallSite::arg_iterator AI = CS.arg_begin(), AE = CS.arg_end();
+                  for (; AI != AE; ++AI, ++PI) {
+                      Value* A = *AI;
+                      if (auto CE = dyn_cast<ConstantExpr>(A)) {
+                          A = CE->getOperand(0);  // Get the function
+                      }
+                      addEdge(A, &*PI);
+                      propagatePts(A, &*PI);
+                  }
+//                  addEdge(, V);
+//                  propagatePts(value, V);
+//                  if (callee->getName().equals("call_func")) {
+//                      errs() << I.getOperand(0) << '\n';
+//
+//                      for (auto& A: F.getArgumentList()) {
+//                          A.dump();
+//                      }
+//                  }
+
+              }
+          }
+      }
+  }
+
+  void doAssignment(Function& F) {
       for (auto& BB: F) {
           for (auto& I: BB) {
               if (AllocaInst* i = dyn_cast<AllocaInst>(&I)) {
@@ -169,7 +212,45 @@ public:
               if (auto F = dyn_cast<Function>(v)) {
                   if (Instruction* I = dyn_cast<Instruction>(key)) {
                       I->dump();
-                      outs() << "    points to @" << F->getName() << '\n';
+                      errs() << "    points to @" << F->getName() << '\n';
+                  }
+              }
+          }
+      }
+  }
+
+  string getLocAsStr(Instruction* I) {
+      string s;
+      if (DILocation* loc = I->getDebugLoc()) {
+          s += loc->getFilename();
+          s += ":" + std::to_string(loc->getLine());
+      }
+      else {
+          errs() << "No debug info found, exit.\n";
+          exit(0);
+      }
+      return s;
+  }
+
+  void report() {
+      for (auto it: _pts) {
+          auto key = it.first;
+          auto set = it.second;
+
+          string funcs = "{ ";
+          for (Value* v: *set) {
+              if (auto F = dyn_cast<Function>(v)) {
+                  funcs += "@" + F->getName().str() + ", ";
+              }
+          }
+          funcs += "}";
+
+          for (auto U: key->users()) {
+              if (auto cs = CallSite(U)) {
+                  /* Indirect call */
+                  if (!cs.getCalledFunction()) {
+                      string loc = getLocAsStr(cs.getInstruction());
+                      errs() << loc << " -> " << funcs << '\n';
                   }
               }
           }
@@ -180,19 +261,22 @@ public:
       _m = &M;
       initPts(M);
       for (auto& F: M) {
-          if (F.getName().equals("main")) {
-              doFunction(F);
-          }
+          doAssignment(F);
       }
 
-      printPointsToMap();
+      for (auto& F: M) {
+          doCall(F);
+      }
+
+      report();
       return false;
   }
 };
 
-char AndersenPass::ID = 0;
+char ResolveIndiCallPass::ID = 0;
 
-static RegisterPass<AndersenPass> AndersenPassInfo("ads", "Andersen's Pointer Analysis Pass",
+static RegisterPass<ResolveIndiCallPass>
+    ResolveIndiCallPassInfo("resolve-indi", "Try to resolve the indirect calls for a given module",
                                   false /* Only looks at CFG */,
                                   true /* Analysis Pass */);
 }
