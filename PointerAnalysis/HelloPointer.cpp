@@ -196,11 +196,30 @@ public:
                       propagatePts(value, V);
                   }
               }
+              else if (SelectInst* i = dyn_cast<SelectInst>(&I)) {
+                  Value* v1 = getRealOperand(i, 1);
+                  Value* v2 = getRealOperand(i, 2);
+                  addEdge(v1, i);
+                  propagatePts(v1, i);
+                  addEdge(v2, i);
+                  propagatePts(v2, i);
+
+              }
               else if (GetElementPtrInst* i = dyn_cast<GetElementPtrInst>(&I)) {
                   Value* pointer = i->getPointerOperand();
                   copyPointToSet(pointer, i);
               }
           }
+      }
+  }
+
+  Value* getRealOperand(Instruction* I, uint i) {
+      Value* v = I->getOperand(i);
+      if (auto CE = dyn_cast<ConstantExpr>(v)) {
+          return CE->getOperand(0);
+      }
+      else {
+          return v;
       }
   }
 

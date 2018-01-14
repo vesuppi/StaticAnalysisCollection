@@ -7,9 +7,12 @@ The passes are intended to be run with `opt`.
 I hope the code could be somewhat educational.
 
 ## Resolve Indirect Call
-This pass only consider load, store and select for points-to set propagation,
-so it should be used before SSA is constructed.
-Otherwise phi node needs to be considered as well.
+This pass only considers the following instruction types for points-to set propagation:
+- Load
+- Store
+- Select
+- Phi
+
 
 ### Example
 Go to PointerAnalysis/test/, do
@@ -38,3 +41,5 @@ This will output:
 inter.c:8 -> { @foo, }
 ```
 The output indicates that line 8 in inter.c has an indirect call to `foo`.
+
+Feel free to try out more complex examples.
