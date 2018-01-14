@@ -103,6 +103,7 @@ public:
   void addEdge(Value* v1, Value* v2) {
       auto adjs = getAdjacentNodes(v1);
       adjs->insert(v2);
+      propagatePts(v1, v2);
   }
   
   void propagatePts(Value* v1, Value* v2) {
@@ -142,7 +143,6 @@ public:
                           A = CE->getOperand(0);  // Get the function
                       }
                       addEdge(A, &*PI);
-                      propagatePts(A, &*PI);
                   }
 //                  addEdge(, V);
 //                  propagatePts(value, V);
@@ -177,7 +177,6 @@ public:
 
                   for (auto V: *getPointToSet(pointer)) {
                       addEdge(V, result);
-                      propagatePts(V, result);
                   }
               }
               else if (StoreInst* i = dyn_cast<StoreInst>(&I)) {
@@ -193,17 +192,13 @@ public:
 
                   for (auto V: *getPointToSet(pointer)) {
                       addEdge(value, V);
-                      propagatePts(value, V);
                   }
               }
               else if (SelectInst* i = dyn_cast<SelectInst>(&I)) {
                   Value* v1 = getRealOperand(i, 1);
                   Value* v2 = getRealOperand(i, 2);
                   addEdge(v1, i);
-                  propagatePts(v1, i);
                   addEdge(v2, i);
-                  propagatePts(v2, i);
-
               }
               else if (GetElementPtrInst* i = dyn_cast<GetElementPtrInst>(&I)) {
                   Value* pointer = i->getPointerOperand();
