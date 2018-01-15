@@ -26,6 +26,7 @@ int main(int argc, char** argv) {
     i += 2;
     fp = bar;
   }
-  call_func(fp);
+  //call_func(fp);
+  fp();
   return i;
 }
