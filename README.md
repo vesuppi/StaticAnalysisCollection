@@ -6,13 +6,21 @@ The passes are intended to be run with `opt`.
 
 I hope the code could be somewhat educational.
 
+The following analysis are currently implemented:
+- Dominator set
+- Natural loop detection
+- Indirect call resolution
+  - Based on Andersen's pointer analysis
+  - Field insensitive
+  - Context insensitive
+
+The following section gives an example of what to expect with the passes.
 ## Resolve Indirect Call
 This pass only considers the following instruction types for points-to set propagation:
 - Load
 - Store
 - Select
 - Phi
-
 
 ### Example
 Go to PointerAnalysis/test/, do

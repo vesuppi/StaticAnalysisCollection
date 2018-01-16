@@ -20,6 +20,7 @@
 #include "llvm/Analysis/LoopPass.h"
 #include "llvm/Analysis/LoopAnalysisManager.h"
 #include "llvm/IR/CFG.h"
+#include "DomSetPass.h"
 
 using namespace llvm;
 
@@ -39,12 +40,17 @@ public:
 
 class LoopInfoPass : public FunctionPass {
   std::vector<NaturalLoop *> _loops;
+  std::map<BasicBlock*, std::set<BasicBlock*>>* _dom;
   bool _per_function;
+  std::map<BasicBlock*, int> _starts;
+  std::map<BasicBlock*, int> _finishes;
+  int _time;
 public:
   static char ID;
 
   LoopInfoPass() : FunctionPass(ID) {
     errs() << "Constructs LoopInfoPass.\n";
+    _time = 0;
     initialize();
   }
 
@@ -52,12 +58,82 @@ public:
 
   }
 
+  void initAux(Function &F) {
+    _time = 0;
+    _starts.clear();
+    _finishes.clear();
+
+    for (auto& B: F) {
+      _starts[&B] = -1;
+      _finishes[&B] = -1;
+    }
+  }
+
+  bool isVisited(BasicBlock* BB) {
+    assert(_starts.find(BB) != _starts.end());
+    return _starts[BB] != -1;
+  }
+
+  bool isFinished(BasicBlock* BB) {
+    assert(_finishes.find(BB) != _finishes.end());
+    return _finishes[BB] != -1;
+  }
+
+  bool isDominator(BasicBlock* dom, BasicBlock* BB) {
+    assert(_dom->find(BB) != _dom->end());
+    auto dom_set = _dom->at(BB);
+    return dom_set.find(dom) != dom_set.end();
+  }
+
+  void DFSTraverse(BasicBlock* BB) {
+    assert(_starts.find(BB) != _starts.end());
+
+    _starts[BB] = _time++;
+    for (auto it = succ_begin(BB), et = succ_end(BB); it != et; ++it) {
+      BasicBlock* successor = *it;
+      if (!isVisited(successor)) {
+        DFSTraverse(successor);
+      }
+      else {
+        if (!isFinished(successor)) {
+          outs() << "back edge: "
+                 << BB->getName()
+                 << " - >"
+                 << successor->getName()
+              ;
+
+          if (isDominator(successor, BB)) {
+            outs() << " (dominator)"
+                   ;
+          }
+          outs() << "\n";
+        }
+      }
+    }
+    _finishes[BB] = _time++;
+  }
+
   bool runOnFunction(Function &F) override {
     if (_per_function) {
       _loops.clear();
     }
 
+    initAux(F);
+    auto domSetPass = new DomSetPass();
+    _dom = domSetPass->getDomSet(F);
+    DFSTraverse(&F.getEntryBlock());
+
     return false;
   }
 };
+
+char LoopInfoPass::ID = 0;
+
+static RegisterPass<LoopInfoPass>
+    LoopInfoPassInfo("loop-info", "Get loop info",
+                     false /* Only looks at CFG */,
+                     true /* Analysis Pass */);
+
 }
+
+
