@@ -33,7 +33,7 @@ int main() {
   return 0;
 }
 $ clang -S -emit-llvm -g inter.c
-$ opt -load /xxx/libXPSAnalysis.so -resolve-indi inter.ll > /dev/null
+$ opt -load /xxx/XPSAnalysis.so -resolve-indi inter.ll > /dev/null
 ```
 
 This will output:

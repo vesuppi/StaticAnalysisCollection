@@ -277,8 +277,15 @@ public:
   }
 
   bool runOnModule(Module& M) override {
-      _m = &M;
-      initPts(M);
+    _m = &M;
+    initPts(M);
+    for (auto& F: M) {
+      for (auto& B: F) {
+        errs() << B.getName() << "\n";
+      }
+    }
+    return false;
+
       for (auto& F: M) {
           if (F.getName().equals("main")) {
           doAssignment(F);}

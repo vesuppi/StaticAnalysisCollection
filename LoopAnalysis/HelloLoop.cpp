@@ -73,10 +73,10 @@ public:
 
   bool runOnFunction(Function& F) override {
       /* This only compiles in runOnFunction */
-      LoopInfoWrapperPass& wrapperPass = getAnalysis<LoopInfoWrapperPass>();
-      LoopInfo* LI = &wrapperPass.getLoopInfo();
+      LoopInfoWrapperPass &wrapperPass = getAnalysis<LoopInfoWrapperPass>();
+      LoopInfo *LI = &wrapperPass.getLoopInfo();
       DominatorTree *DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
-      for (Loop* L: *LI) {
+      for (Loop *L: *LI) {
           /* do stuff */
       }
   }
