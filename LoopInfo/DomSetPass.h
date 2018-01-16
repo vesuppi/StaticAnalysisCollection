@@ -35,7 +35,7 @@ public:
   static char ID;
 
   DomSetPass(): FunctionPass(ID) {
-      errs() << "Constructs DomSetPass.\n";
+      // errs() << "Constructs DomSetPass.\n";
       initialize();
   }
 
