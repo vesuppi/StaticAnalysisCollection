@@ -74,10 +74,10 @@ class LoopInfoPass : public FunctionPass {
   std::map<BasicBlock*, NaturalLoop *> _loops;
   std::set<BasicBlock*> _loop_body_visited_set;
   std::map<BasicBlock*, std::set<BasicBlock*>>* _dom;
-  bool _per_function;
   std::map<BasicBlock*, int> _starts;
   std::map<BasicBlock*, int> _finishes;
   int _time;
+  bool _per_function;
 public:
   static char ID;
 
@@ -176,7 +176,7 @@ public:
   void loopGetBody(NaturalLoop* loop, BasicBlock* root) {
     _loop_body_visited_set.clear();
     _loop_body_visited_set.insert(loop->_header);
-    addLoopBodyImpl(loop, root);
+    loopGetBodyImpl(loop, root);
   }
 
   bool loopBodyIsVisited(BasicBlock* BB) {
@@ -192,7 +192,7 @@ public:
     _loop_body_visited_set.insert(BB);
   }
 
-  void addLoopBodyImpl(NaturalLoop* loop, BasicBlock* root) {
+  void loopGetBodyImpl(NaturalLoop* loop, BasicBlock* root) {
     BasicBlock* header = loop->_header;
     addToLoopBody(loop, root);
     for (auto it = pred_begin(root), et = pred_end(root);
@@ -203,7 +203,7 @@ public:
       }
 
       if (!loopBodyIsVisited(predecessor)) {
-        addToLoopBody(loop, predecessor);
+        loopGetBodyImpl(loop, predecessor);
       }
     }
   }
@@ -226,6 +226,7 @@ public:
   }
 
   bool runOnFunction(Function &F) override {
+    outs() << "F: " << F.getName() << "\n";
     if (_per_function) {
       _loops.clear();
     }
