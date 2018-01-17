@@ -33,14 +33,14 @@ class SpaceValue: public Value {
 public:
   explicit SpaceValue(Type* ty): Value(ty, 0) {}
   void dump() const {
-      errs() << "SpaceValue: " << this << '\n';
+    errs() << "SpaceValue: " << this << '\n';
   }
 };
 
 class ResolveIndiCallPass: public ModulePass {
 public:
   Module* _m = nullptr;
-  // All points-to sets map
+// All points-to sets map
   std::map<Value*, std::set<Value*>*> _pts;
   std::map<Value*, std::set<Value*>*> _graph;
   int _opt_level = 0;
@@ -48,232 +48,222 @@ public:
   static char ID;
 
   ResolveIndiCallPass(): ModulePass(ID) {
-      errs() << "Constructs ResolveIndiCallPass.\n";
-      initialize();
+    errs() << "Constructs ResolveIndiCallPass.\n";
+    initialize();
   }
 
-  // Do some non module-specific stuff
+// Do some non module-specific stuff
   void initialize() {
-      
+
   }
 
   void initPts(Module& M) {
-      for (auto& F: M) {
-          if (F.isIntrinsic()) {
-              continue;
-          }
-          std::set<Value*>* singleton_set = new std::set<Value*>();
-          singleton_set->insert(&F);
-          _pts[&F] = singleton_set;
+    for (auto& F: M) {
+      if (F.isIntrinsic()) {
+        continue;
+      }
+      std::set<Value*>* singleton_set = new std::set<Value*>();
+      singleton_set->insert(&F);
+      _pts[&F] = singleton_set;
+    }
+
+    for (auto& GV: M.getGlobalList()) {
+      if (GV.getName().startswith(".str")) {
+        continue;
       }
 
-      for (auto& GV: M.getGlobalList()) {
-          if (GV.getName().startswith(".str")) {
-              continue;
-          }
-
-          Type* value_ty = GV.getValueType();
-          getPointToSet(&GV)->insert(new SpaceValue(value_ty));
+      Type* value_ty = GV.getValueType();
+      getPointToSet(&GV)->insert(new SpaceValue(value_ty));
 
 //          if (value_ty->isPointerTy())
-      }
+    }
   }
 
 
   std::set<Value*>* getPointToSet(Value* key) {
-      if (_pts.find(key) == _pts.end()) {
-          _pts[key] = new std::set<Value*>();
-      }
+    if (_pts.find(key) == _pts.end()) {
+      _pts[key] = new std::set<Value*>();
+    }
 
-      return _pts[key];
+    return _pts[key];
   }
 
   void copyPointToSet(Value* from, Value* to) {
-      _pts[to] = getPointToSet(from);
+    _pts[to] = getPointToSet(from);
   }
 
   std::set<Value*>* getAdjacentNodes(Value* key) {
-      if (_graph.find(key) == _graph.end()) {
-          _graph[key] = new std::set<Value*>();
-      }
+    if (_graph.find(key) == _graph.end()) {
+      _graph[key] = new std::set<Value*>();
+    }
 
-      return _graph[key];
+    return _graph[key];
   }
 
   void addEdge(Value* v1, Value* v2) {
-      auto adjs = getAdjacentNodes(v1);
-      adjs->insert(v2);
-      propagatePts(v1, v2);
+    auto adjs = getAdjacentNodes(v1);
+    adjs->insert(v2);
+    propagatePts(v1, v2);
   }
-  
-  void propagatePts(Value* v1, Value* v2) {
-      errs() << v1 << " to " << v2 << '\n';
-      auto s1 = getPointToSet(v1);
-      auto s2 = getPointToSet(v2);
-      size_t size_before = s2->size();
-      s2->insert(s1->begin(), s1->end());
-      size_t size_after = s2->size();
 
-      // Update the transitive closure
-      if (size_before != size_after) {
-          for (auto V: *getAdjacentNodes(v2)) {
-              propagatePts(v1, V);
-          }
+  void propagatePts(Value* v1, Value* v2) {
+    errs() << v1 << " to " << v2 << '\n';
+    auto s1 = getPointToSet(v1);
+    auto s2 = getPointToSet(v2);
+    size_t size_before = s2->size();
+    s2->insert(s1->begin(), s1->end());
+    size_t size_after = s2->size();
+
+    // Update the transitive closure
+    if (size_before != size_after) {
+      for (auto V: *getAdjacentNodes(v2)) {
+        propagatePts(v1, V);
       }
+    }
   }
 
   void doCall(Function& F) {
-      for (auto& BB: F) {
-          for (auto &I: BB) {
-              if (CallSite CS = CallSite(&I)) {
-                  Function* callee = CS.getCalledFunction();
-                  if (!callee || callee->isIntrinsic()) {
-                      continue;
-                  }
-
-                  errs() << "f: " << callee->getName() << '\n';
-                  int arg_num = CS.getNumArgOperands();
-                  int param_num = callee->getArgumentList().size();
-                  assert(arg_num == param_num);
-
-                  Function::arg_iterator PI = callee->arg_begin(), PE = callee->arg_end();
-                  CallSite::arg_iterator AI = CS.arg_begin(), AE = CS.arg_end();
-                  for (; AI != AE; ++AI, ++PI) {
-                      Value* A = *AI;
-                      if (auto CE = dyn_cast<ConstantExpr>(A)) {
-                          A = CE->getOperand(0);  // Get the function
-                      }
-                      addEdge(A, &*PI);
-                  }
-//                  addEdge(, V);
-//                  propagatePts(value, V);
-//                  if (callee->getName().equals("call_func")) {
-//                      errs() << I.getOperand(0) << '\n';
-//
-//                      for (auto& A: F.getArgumentList()) {
-//                          A.dump();
-//                      }
-//                  }
-
-              }
+    for (auto& BB: F) {
+      for (auto &I: BB) {
+        if (CallSite CS = CallSite(&I)) {
+          Function* callee = CS.getCalledFunction();
+          if (!callee || callee->isIntrinsic()) {
+            continue;
           }
+
+          errs() << "f: " << callee->getName() << '\n';
+          int arg_num = CS.getNumArgOperands();
+          int param_num = callee->getArgumentList().size();
+          assert(arg_num == param_num);
+
+          Function::arg_iterator PI = callee->arg_begin(), PE = callee->arg_end();
+          CallSite::arg_iterator AI = CS.arg_begin(), AE = CS.arg_end();
+          for (; AI != AE; ++AI, ++PI) {
+            Value* A = *AI;
+            if (auto CE = dyn_cast<ConstantExpr>(A)) {
+              A = CE->getOperand(0);  // Get the function
+            }
+            addEdge(A, &*PI);
+          }
+        }
       }
+    }
   }
 
   void doAssignment(Function& F) {
-      for (auto& BB: F) {
-          for (auto& I: BB) {
-              if (AllocaInst* i = dyn_cast<AllocaInst>(&I)) {
-                  getPointToSet(i)->insert(new SpaceValue(i->getAllocatedType()));
-              }
-              else if (LoadInst* i = dyn_cast<LoadInst>(&I)) {
-                  // Load value from <pointer> to <result>
-                  // %2 = load %1
-                  // _pts[%2] = { _pts[v] for v in _pts[%1] }
-                  Value* result = i;
-                  Value* pointer = i->getPointerOperand();
-                  if (auto CE = dyn_cast<ConstantExpr>(pointer)) {
-                      pointer = CE->getOperand(0);
-                  }
-
-                  for (auto V: *getPointToSet(pointer)) {
-                      addEdge(V, result);
-                  }
-              }
-              else if (StoreInst* i = dyn_cast<StoreInst>(&I)) {
-                  // Store <value> to <pointer>
-                  Value* value = i->getValueOperand();
-                  if (auto CE = dyn_cast<ConstantExpr>(value)) {
-                      value = CE->getOperand(0);  // Get the function
-                  }
-                  Value* pointer = i->getPointerOperand();
-                  if (auto CE = dyn_cast<ConstantExpr>(pointer)) {
-                      pointer = CE->getOperand(0);  // Get the function
-                  }
-
-                  for (auto V: *getPointToSet(pointer)) {
-                      addEdge(value, V);
-                  }
-              }
-              else if (SelectInst* i = dyn_cast<SelectInst>(&I)) {
-                  Value* v1 = getRealOperand(i, 1);
-                  Value* v2 = getRealOperand(i, 2);
-                  addEdge(v1, i);
-                  addEdge(v2, i);
-              }
-              else if (GetElementPtrInst* i = dyn_cast<GetElementPtrInst>(&I)) {
-                  Value* pointer = i->getPointerOperand();
-                  copyPointToSet(pointer, i);
-              }
+    for (auto& BB: F) {
+      for (auto& I: BB) {
+        if (AllocaInst* i = dyn_cast<AllocaInst>(&I)) {
+          getPointToSet(i)->insert(new SpaceValue(i->getAllocatedType()));
+        }
+        else if (LoadInst* i = dyn_cast<LoadInst>(&I)) {
+          // Load value from <pointer> to <result>
+          // %2 = load %1
+          // _pts[%2] = { _pts[v] for v in _pts[%1] }
+          Value* result = i;
+          Value* pointer = i->getPointerOperand();
+          if (auto CE = dyn_cast<ConstantExpr>(pointer)) {
+            pointer = CE->getOperand(0);
           }
+
+          for (auto V: *getPointToSet(pointer)) {
+            addEdge(V, result);
+          }
+        }
+        else if (StoreInst* i = dyn_cast<StoreInst>(&I)) {
+          // Store <value> to <pointer>
+          Value* value = i->getValueOperand();
+          if (auto CE = dyn_cast<ConstantExpr>(value)) {
+            value = CE->getOperand(0);  // Get the function
+          }
+          Value* pointer = i->getPointerOperand();
+          if (auto CE = dyn_cast<ConstantExpr>(pointer)) {
+            pointer = CE->getOperand(0);  // Get the function
+          }
+
+          for (auto V: *getPointToSet(pointer)) {
+            addEdge(value, V);
+          }
+        }
+        else if (SelectInst* i = dyn_cast<SelectInst>(&I)) {
+          Value* v1 = getRealOperand(i, 1);
+          Value* v2 = getRealOperand(i, 2);
+          addEdge(v1, i);
+          addEdge(v2, i);
+        }
+        else if (GetElementPtrInst* i = dyn_cast<GetElementPtrInst>(&I)) {
+          Value* pointer = i->getPointerOperand();
+          copyPointToSet(pointer, i);
+        }
       }
+    }
   }
 
   Value* getRealOperand(Instruction* I, uint i) {
-      Value* v = I->getOperand(i);
-      if (auto CE = dyn_cast<ConstantExpr>(v)) {
-          return CE->getOperand(0);
-      }
-      else {
-          return v;
-      }
+    Value* v = I->getOperand(i);
+    if (auto CE = dyn_cast<ConstantExpr>(v)) {
+      return CE->getOperand(0);
+    }
+    else {
+      return v;
+    }
   }
 
   void printPointsToMap() {
-      for (auto it: _pts) {
-          auto key = it.first;
-          auto set = it.second;
-          for (Value* v: *set) {
-              if (auto F = dyn_cast<Function>(v)) {
-                  if (Instruction* I = dyn_cast<Instruction>(key)) {
-                      I->dump();
-                      errs() << "    points to @" << F->getName() << '\n';
-                  }
-              }
+    for (auto it: _pts) {
+      auto key = it.first;
+      auto set = it.second;
+      for (Value* v: *set) {
+        if (auto F = dyn_cast<Function>(v)) {
+          if (Instruction* I = dyn_cast<Instruction>(key)) {
+            I->dump();
+            errs() << "    points to @" << F->getName() << '\n';
           }
+        }
       }
+    }
   }
 
   string getLocAsStr(Instruction* I) {
-      string s;
-      if (DILocation* loc = I->getDebugLoc()) {
-          s += loc->getFilename();
-          s += ":" + std::to_string(loc->getLine());
-      }
-      else {
-          errs() << "No debug info found, exit.\n";
-          exit(0);
-      }
-      return s;
+    string s;
+    if (DILocation* loc = I->getDebugLoc()) {
+      s += loc->getFilename();
+      s += ":" + std::to_string(loc->getLine());
+    }
+    else {
+      errs() << "No debug info found, exit.\n";
+      exit(0);
+    }
+    return s;
   }
 
   void report() {
-      errs() << _pts.size() << '\n';
-      for (auto it: _pts) {
-          auto key = it.first;
-          auto set = it.second;
-          errs() << key << '\n';
-          string funcs = "{ ";
-          for (Value* v: *set) {
-              if (auto F = dyn_cast<Function>(v)) {
-                  funcs += "@" + F->getName().str() + ", ";
-              }
-          }
-          funcs += "}";
-
-          // todo: this repeats one user forever
-          for (auto U: key->users()) {
-              errs() << key << " " << U << '\n';
-              U->dump();
-              if (auto cs = CallSite(U)) {
-                  /* Indirect call */
-                  if (!cs.getCalledFunction()) {
-                      string loc = getLocAsStr(cs.getInstruction());
-                      errs() << loc << " -> " << funcs << '\n';
-                  }
-              }
-          }
+    errs() << _pts.size() << '\n';
+    for (auto it: _pts) {
+      auto key = it.first;
+      auto set = it.second;
+      errs() << key << '\n';
+      string funcs = "{ ";
+      for (Value* v: *set) {
+        if (auto F = dyn_cast<Function>(v)) {
+          funcs += "@" + F->getName().str() + ", ";
+        }
       }
+      funcs += "}";
+
+// todo: this repeats one user forever
+      for (auto U: key->users()) {
+        errs() << key << " " << U << '\n';
+        U->dump();
+        if (auto cs = CallSite(U)) {
+          /* Indirect call */
+          if (!cs.getCalledFunction()) {
+            string loc = getLocAsStr(cs.getInstruction());
+            errs() << loc << " -> " << funcs << '\n';
+          }
+        }
+      }
+    }
   }
 
   bool runOnModule(Module& M) override {
@@ -286,29 +276,30 @@ public:
     }
     return false;
 
-      for (auto& F: M) {
-          if (F.getName().equals("main")) {
-          doAssignment(F);}
-      }
+    for (auto& F: M) {
+      if (F.getName().equals("main")) {
+        doAssignment(F);}
+    }
 
-      for (auto& F: M) {
-          if (F.getName().equals("main")) {
-              doCall(F);
-          }
+    for (auto& F: M) {
+      if (F.getName().equals("main")) {
+        doCall(F);
       }
+    }
 
-      errs() << "to report\n";
-      report();
-      return false;
+    errs() << "to report\n";
+    report();
+    return false;
   }
 };
 
 char ResolveIndiCallPass::ID = 0;
 
 static RegisterPass<ResolveIndiCallPass>
-    ResolveIndiCallPassInfo("resolve-indi", "Try to resolve the indirect calls for a given module",
-                                  false /* Only looks at CFG */,
-                                  true /* Analysis Pass */);
+    ResolveIndiCallPassInfo("resolve-indi",
+                            "Try to resolve the indirect calls for a given module",
+                            false /* Only looks at CFG */,
+                            true /* Analysis Pass */);
 }
 
 #endif //LLVM_PointerAnalysis_H

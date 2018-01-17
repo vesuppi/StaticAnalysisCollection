@@ -2,7 +2,6 @@
 // Created by tzhou on 1/15/18.
 //
 
-
 #include <cmath>
 #include <set>
 #include <llvm/Support/raw_ostream.h>
@@ -48,7 +47,6 @@ typedef std::string string;
 class NaturalLoop {
 public:
   BasicBlock *_header;
-  BasicBlock *_preheader;
   std::set<BasicBlock *> _latches;
   std::set<BasicBlock *> _body;
   std::set<BasicBlock *> _exits;
@@ -243,9 +241,7 @@ public:
 char LoopInfoPass::ID = 0;
 
 static RegisterPass<LoopInfoPass>
-    LoopInfoPassInfo("loop-info", "Get loop info",
-                     false /* Only looks at CFG */,
-                     true /* Analysis Pass */);
+    LoopInfoPassInfo("loop-info", "Get loop info");
 
 }
 
