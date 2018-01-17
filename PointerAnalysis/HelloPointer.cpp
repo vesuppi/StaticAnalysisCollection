@@ -108,7 +108,6 @@ public:
   }
 
   void propagatePts(Value* v1, Value* v2) {
-    errs() << v1 << " to " << v2 << '\n';
     auto s1 = getPointToSet(v1);
     auto s2 = getPointToSet(v2);
     size_t size_before = s2->size();
@@ -123,7 +122,7 @@ public:
     }
   }
 
-  void doCall(Function& F) {
+  void doCalls(Function& F) {
     for (auto& BB: F) {
       for (auto &I: BB) {
         if (CallSite CS = CallSite(&I)) {
@@ -148,6 +147,29 @@ public:
           }
         }
       }
+    }
+  }
+
+  void doCall(CallSite& CS) {
+    Function* callee = CS.getCalledFunction();
+    if (!callee || callee->isIntrinsic()) {
+      return;
+    }
+
+    errs() << "f: " << callee->getName() << '\n';
+    int arg_num = CS.getNumArgOperands();
+    int param_num = callee->getArgumentList().size();
+    assert(arg_num == param_num);
+
+    Function::arg_iterator PI = callee->arg_begin(), PE = callee->arg_end();
+    CallSite::arg_iterator AI = CS.arg_begin(), AE = CS.arg_end();
+    for (; AI != AE; ++AI, ++PI) {
+      Value* A = *AI;
+      A->dump();
+      if (auto CE = dyn_cast<ConstantExpr>(A)) {
+        A = CE->getOperand(0);  // Get the function
+      }
+      addEdge(A, &*PI);
     }
   }
 
