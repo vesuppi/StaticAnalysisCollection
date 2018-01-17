@@ -29,8 +29,8 @@ namespace xps {
 
 typedef std::string string;
 
-// static cl::opt<string> AndersenOpt
-// ("ander-test-opt", cl::desc("AndersenOpt"), cl::value_desc("value"));
+static cl::opt<bool> PrintPropagation
+("print-propagation", cl::desc("PrintPropagation"), cl::value_desc("bool"));
 
 class SpaceValue: public Value {
   string _name;
@@ -61,7 +61,7 @@ public:
   std::map<Value*, std::set<Value*>*> _graph;
   std::map<Value*, string> _mem_ref_names;
   int _opt_level = 0;
-  bool _print_propagation = true;
+  bool _print_propagation = false;
 public:
   static char ID;
 
@@ -72,7 +72,9 @@ public:
 
   // Do some non module-specific stuff
   void initialize() {
-
+    if (PrintPropagation) {
+      _print_propagation = true;
+    }
   }
 
   void initPts(Module& M) {
@@ -215,9 +217,6 @@ public:
     for (auto& B: *callee) {
       for (auto& I: B) {
         if (ReturnInst* R = dyn_cast<ReturnInst>(&I)) {
-          errs().reverseColor();
-          printPointsToSet(R);
-          errs().resetColor();
           assert(R->getNumOperands() == 1);
           addEdge(getRealOperand(R, 0), CS.getInstruction());
         }
