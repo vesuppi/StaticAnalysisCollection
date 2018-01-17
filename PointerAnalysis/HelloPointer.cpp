@@ -27,7 +27,8 @@ namespace xps {
 
 typedef std::string string;
 
-// static cl::opt<string> AndersenOpt("ander-test-opt", cl::desc("AndersenOpt"), cl::value_desc("value"));
+// static cl::opt<string> AndersenOpt
+// ("ander-test-opt", cl::desc("AndersenOpt"), cl::value_desc("value"));
 
 class SpaceValue: public Value {
 public:
@@ -40,7 +41,7 @@ public:
 class ResolveIndiCallPass: public ModulePass {
 public:
   Module* _m = nullptr;
-// All points-to sets map
+  // All points-to sets map
   std::map<Value*, std::set<Value*>*> _pts;
   std::map<Value*, std::set<Value*>*> _graph;
   int _opt_level = 0;
@@ -52,7 +53,7 @@ public:
     initialize();
   }
 
-// Do some non module-specific stuff
+  // Do some non module-specific stuff
   void initialize() {
 
   }
@@ -154,7 +155,8 @@ public:
     for (auto& BB: F) {
       for (auto& I: BB) {
         if (AllocaInst* i = dyn_cast<AllocaInst>(&I)) {
-          getPointToSet(i)->insert(new SpaceValue(i->getAllocatedType()));
+          getPointToSet(i)->insert(
+              new SpaceValue(i->getAllocatedType()));
         }
         else if (LoadInst* i = dyn_cast<LoadInst>(&I)) {
           // Load value from <pointer> to <result>
@@ -217,7 +219,8 @@ public:
         if (auto F = dyn_cast<Function>(v)) {
           if (Instruction* I = dyn_cast<Instruction>(key)) {
             I->dump();
-            errs() << "    points to @" << F->getName() << '\n';
+            errs() << "    points to @"
+                   << F->getName() << '\n';
           }
         }
       }
@@ -251,7 +254,7 @@ public:
       }
       funcs += "}";
 
-// todo: this repeats one user forever
+      // todo: this repeats one user forever
       for (auto U: key->users()) {
         errs() << key << " " << U << '\n';
         U->dump();
