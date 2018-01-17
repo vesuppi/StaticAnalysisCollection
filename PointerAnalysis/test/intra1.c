@@ -23,5 +23,6 @@ int main(int argc, char** argv) {
   else {
     fp = bar;
   }
-  call_func(fp);
+  //call_func(fp);
+  fp();
 }

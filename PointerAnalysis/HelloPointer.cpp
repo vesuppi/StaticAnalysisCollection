@@ -15,6 +15,7 @@
 #include "llvm/IR/DebugInfo.h"
 #include <llvm/IR/CallSite.h>
 #include <llvm/IR/Constants.h>
+#include <llvm/Transforms/Utils/MemorySSA.h>
 #include "llvm/IR/Value.h"
 #include "llvm/IR/PassManager.h"
 
@@ -31,12 +32,25 @@ typedef std::string string;
 // ("ander-test-opt", cl::desc("AndersenOpt"), cl::value_desc("value"));
 
 class SpaceValue: public Value {
+  string _name;
+  int _id;
 public:
-  explicit SpaceValue(Type* ty): Value(ty, 0) {}
-  void dump() const {
-    errs() << "SpaceValue: " << this << '\n';
+  static int ID;
+public:
+  explicit SpaceValue(Type* ty): Value(ty, 0) {
+    //_id = ID++;
+  }
+
+  int getID() {
+    return _id;
+  }
+
+  string getName() {
+    return "S" + std::to_string(_id);
   }
 };
+
+int SpaceValue::ID = 0;
 
 class ResolveIndiCallPass: public ModulePass {
 public:
@@ -114,12 +128,6 @@ public:
     size_t size_before = s2->size();
     s2->insert(s1->begin(), s1->end());
     size_t size_after = s2->size();
-
-    if (_print_propagation) {
-      if (auto I = dyn_cast<Instruction>(v2)) {
-        printPointsToSet(v2);
-      }
-    }
 
     // Update the transitive closure
     if (size_before != size_after) {
@@ -209,7 +217,16 @@ public:
   }
 
   void doAlloca(AllocaInst* I) {
-    getPointToSet(I)->insert( new SpaceValue(I->getAllocatedType()));
+    auto stack_space = new MemoryDef(I->getContext(), nullptr, I, I->getParent(), SpaceValue::ID++);
+    //auto stack_space = new SpaceValue(I->getAllocatedType());
+    if (I->hasName()) {
+      stack_space->setName("*"+I->getName());
+    }
+
+    getPointToSet(I)->insert(stack_space);
+    if (_print_propagation) {
+      printPointsToSet(I);
+    }
   }
 
   void doLoad(LoadInst* I) {
@@ -318,6 +335,8 @@ public:
   void printPointsToSet(Value* key) {
     auto set = getPointToSet(key);
     if (auto I = dyn_cast<Instruction>(key)) {
+      errs() << "[" << I->getFunction()->getName()
+             << "]";
       key->dump();
       errs() << "    -> " << getSetAsStr(set)
              << "\n";
@@ -331,10 +350,18 @@ public:
       if (auto F = dyn_cast<Function>(v)) {
         str += "@" + F->getName().str() + ", ";
       }
+      else if (auto M = dyn_cast<MemoryDef>(v)) {
+        str += M->getName().str() + ", ";
+      }
     }
     size_t len = str.size();
-    str[len-2] = ' ';
-    str[len-1] = '}';
+    if (len > 2) {
+      str[len-2] = ' ';
+      str[len-1] = '}';
+    }
+    else {
+      str += "}";
+    }
     return str;
   }
 
@@ -378,7 +405,7 @@ public:
 
     for (auto& F: M) {
       if (_print_propagation) {
-        errs() << "Function: " << F.getName() << "\n";
+        //errs() << "Function: " << F.getName() << "\n";
       }
       doAssignment(F);
     }
