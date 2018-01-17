@@ -354,10 +354,18 @@ public:
     }
     else {
       if (key->hasName()) {
-        errs() << key->getName();
+        if (dyn_cast<Instruction>(key)
+            || dyn_cast<Argument>(key)) {
+          errs() << "%" + key->getName();
+        }
+        else if (dyn_cast<GlobalValue>(key)) {
+          errs() << "@" + key->getName();
+        }
+        else {
+          errs() << key->getName();
+        }
       }
       else {
-
         errs() << "this";
       }
     }
@@ -427,7 +435,7 @@ public:
   }
 
   void report() {
-    errs() << _pts.size() << '\n';
+    errs() << "Report:\n";
     for (auto it: _pts) {
       auto key = it.first;
       auto set = it.second;

@@ -50,5 +50,7 @@ This will output:
 inter.c:8 -> { @foo, }
 ```
 The output indicates that line 8 in inter.c has an indirect call to `foo`.
+Also enabling option `-print-propagation` prints out the points-to set
+propagation for each instruction.
 
 Feel free to try out more complex examples.
