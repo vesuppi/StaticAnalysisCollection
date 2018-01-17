@@ -18,6 +18,7 @@
 #include <llvm/Transforms/Utils/MemorySSA.h>
 #include "llvm/IR/Value.h"
 #include "llvm/IR/PassManager.h"
+#include "InstSetName.h"
 
 using namespace llvm;
 
@@ -129,6 +130,9 @@ public:
     size_t size_before = s2->size();
     s2->insert(s1->begin(), s1->end());
     size_t size_after = s2->size();
+    if (_print_propagation) {
+      printPointsToSet(v2);
+    }
 
     // Update the transitive closure
     if (size_before != size_after) {
@@ -211,7 +215,11 @@ public:
     for (auto& B: *callee) {
       for (auto& I: B) {
         if (ReturnInst* R = dyn_cast<ReturnInst>(&I)) {
-          addEdge(R, CS.getInstruction());
+          errs().reverseColor();
+          printPointsToSet(R);
+          errs().resetColor();
+          assert(R->getNumOperands() == 1);
+          addEdge(getRealOperand(R, 0), CS.getInstruction());
         }
       }
     }
@@ -223,7 +231,9 @@ public:
     //auto stack_space = new SpaceValue(I->getAllocatedType());
     if (I->hasName()) {
       //stack_space->setName("*"+I->getName());
-      _mem_ref_names[stack_space] = "S" + std::to_string(SpaceValue::ID);
+      string name = std::to_string(SpaceValue::ID);
+      name += " (*%" + I->getName().str() + ")";
+      _mem_ref_names[stack_space] = "S" + name;
     }
 
     getPointToSet(I)->insert(stack_space);
@@ -247,7 +257,7 @@ public:
     }
 
     if (_print_propagation) {
-      printPointsToSet(I);
+      //printPointsToSet(I);
     }
   }
 
@@ -267,7 +277,7 @@ public:
     }
 
     if (_print_propagation) {
-      printPointeePointsToSet(pointer);
+      //printPointeePointsToSet(pointer);
     }
   }
 
@@ -285,7 +295,6 @@ public:
   }
 
   void doCast(CastInst* I) {
-    I->dump();
     assert(I->getNumOperands() == 1);
     addEdge(getRealOperand(I, 0), I);
   }
@@ -344,17 +353,28 @@ public:
     }
   }
 
+  string& getMemoryDefName(MemoryDef* M) {
+    assert(_mem_ref_names.find(M) != _mem_ref_names.end());
+    return _mem_ref_names[M];
+  }
+
   void printPointsToSet(Value* key) {
     auto set = getPointToSet(key);
     errs() << "    | ";
-    if (key->hasName()) {
-      errs() << key->getName();
+    if (auto M = dyn_cast<MemoryDef>(key)) {
+      errs() << getMemoryDefName(M);
     }
     else {
-      errs() << "this ";
+      if (key->hasName()) {
+        errs() << key->getName();
+      }
+      else {
+
+        errs() << "this";
+      }
     }
 
-    errs() << "-> " << getSetAsStr(set)
+    errs() << " -> " << getSetAsStr(set)
            << "\n";
   }
 
@@ -365,10 +385,10 @@ public:
       errs() << key->getName();
     }
     else {
-      errs() << "__ ";
+      errs() << "__";
     }
 
-    errs() << "-> &" << getSetAsStr(set)
+    errs() << " -> &" << getSetAsStr(set)
            << "\n";
   }
 
@@ -440,8 +460,10 @@ public:
 
   bool runOnModule(Module& M) override {
     _m = &M;
-    initPts(M);
 
+    initPts(M);
+    InstSetNamePass* pass = new InstSetNamePass();
+    pass->nameInsts(M);
 
     for (auto& F: M) {
       if (_print_propagation) {

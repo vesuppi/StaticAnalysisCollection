@@ -19,6 +19,7 @@ add_llvm_loadable_module(XPSAnalysis
         LoopAnalysis/HelloLoop.cpp
         LoopInfo/DomSetPass.h
         LoopInfo/LoopInfo.cpp
+        PointerAnalysis/InstSetName.h
 
         PLUGIN_TOOL
         opt
