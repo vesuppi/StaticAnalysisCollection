@@ -39,7 +39,7 @@ public:
   static int ID;
 public:
   explicit SpaceValue(Type* ty): Value(ty, 0) {
-    //_id = ID++;
+    _id = ID++;
   }
 
   int getID() {
@@ -237,9 +237,6 @@ public:
     }
 
     getPointToSet(I)->insert(stack_space);
-    if (_print_propagation) {
-      //printPointsToSet(I);
-    }
   }
 
   void doLoad(LoadInst* I) {
@@ -254,10 +251,6 @@ public:
 
     for (auto V: *getPointToSet(pointer)) {
       addEdge(V, result);
-    }
-
-    if (_print_propagation) {
-      //printPointsToSet(I);
     }
   }
 
@@ -274,10 +267,6 @@ public:
 
     for (auto V: *getPointToSet(pointer)) {
       addEdge(value, V);
-    }
-
-    if (_print_propagation) {
-      //printPointeePointsToSet(pointer);
     }
   }
 
