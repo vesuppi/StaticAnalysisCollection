@@ -21,6 +21,7 @@ This pass only considers the following instruction types for points-to set propa
 - Store
 - Select
 - Phi
+- Cast (a group of instruction types)
 
 ### Example
 Go to PointerAnalysis/test/, do

@@ -45,6 +45,7 @@ public:
   std::map<Value*, std::set<Value*>*> _pts;
   std::map<Value*, std::set<Value*>*> _graph;
   int _opt_level = 0;
+  bool _print_propagation = true;
 public:
   static char ID;
 
@@ -114,6 +115,12 @@ public:
     s2->insert(s1->begin(), s1->end());
     size_t size_after = s2->size();
 
+    if (_print_propagation) {
+      if (auto I = dyn_cast<Instruction>(v2)) {
+        printPointsToSet(v2);
+      }
+    }
+
     // Update the transitive closure
     if (size_before != size_after) {
       for (auto V: *getAdjacentNodes(v2)) {
@@ -150,32 +157,59 @@ public:
     }
   }
 
-  void doCall(CallSite& CS) {
+  // Propagate arguments and return value
+  void doCall(CallSite CS) {
     Function* callee = CS.getCalledFunction();
-    if (!callee || callee->isIntrinsic()) {
+    if (!callee) {
       return;
     }
 
-    errs() << "f: " << callee->getName() << '\n';
+    if (callee->isIntrinsic() || callee->isDeclaration()) {
+      return;
+    }
+
+    if (callee->isVarArg()) {
+      errs().changeColor(raw_ostream::MAGENTA);
+      errs() << "<WARNING>: ";
+      errs().resetColor();
+      errs() << "Ignored VarArg function ["
+             << callee->getName() << "]"
+             << "\n";
+    }
+
     int arg_num = CS.getNumArgOperands();
     int param_num = callee->getArgumentList().size();
     assert(arg_num == param_num);
 
+    // Propagate arguments
     Function::arg_iterator PI = callee->arg_begin(), PE = callee->arg_end();
     CallSite::arg_iterator AI = CS.arg_begin(), AE = CS.arg_end();
+
     for (; AI != AE; ++AI, ++PI) {
       Value* A = *AI;
-      A->dump();
       if (auto CE = dyn_cast<ConstantExpr>(A)) {
         A = CE->getOperand(0);  // Get the function
       }
       addEdge(A, &*PI);
     }
+
+    // Propagate return value
+    Type* VoidTy = Type::getVoidTy(_m->getContext());
+    if (callee->doesNotReturn() || callee->getReturnType() == VoidTy) {
+      return;
+    }
+
+    for (auto& B: *callee) {
+      for (auto& I: B) {
+        if (ReturnInst* R = dyn_cast<ReturnInst>(&I)) {
+          addEdge(R, CS.getInstruction());
+        }
+      }
+    }
   }
 
   void doAlloca(AllocaInst* I) {
-    getPointToSet(I)->insert(
-        new SpaceValue(I->getAllocatedType()));
+    getPointToSet(I)->insert( new SpaceValue(I->getAllocatedType()));
   }
 
   void doLoad(LoadInst* I) {
@@ -218,7 +252,14 @@ public:
 
   void doGEP(GetElementPtrInst* I) {
     Value* pointer = I->getPointerOperand();
-    copyPointToSet(pointer, I);
+    // copyPointToSet(pointer, I);
+    addEdge(pointer, I);
+  }
+
+  void doCast(CastInst* I) {
+    I->dump();
+    assert(I->getNumOperands() == 1);
+    addEdge(getRealOperand(I, 0), I);
   }
 
   void doAssignment(Function& F) {
@@ -239,8 +280,11 @@ public:
         else if (auto i = dyn_cast<GetElementPtrInst>(&I)) {
           doGEP(i);
         }
+        else if (auto i = dyn_cast<CastInst>(&I)) {
+          doCast(i);
+        }
         else if (CallSite CS = CallSite(&I)) {
-
+          doCall(CS);
         }
       }
     }
@@ -262,14 +306,36 @@ public:
       auto set = it.second;
       for (Value* v: *set) {
         if (auto F = dyn_cast<Function>(v)) {
-          if (Instruction* I = dyn_cast<Instruction>(key)) {
-            I->dump();
-            errs() << "    points to @"
+          if (auto I = dyn_cast<Instruction>(key)) {
+            errs() << key->getName() << " points to @"
                    << F->getName() << '\n';
           }
         }
       }
     }
+  }
+
+  void printPointsToSet(Value* key) {
+    auto set = getPointToSet(key);
+    if (auto I = dyn_cast<Instruction>(key)) {
+      key->dump();
+      errs() << "    -> " << getSetAsStr(set)
+             << "\n";
+    }
+
+  }
+
+  string getSetAsStr(std::set<Value*>* set) {
+    string str = "{ ";
+    for (Value* v: *set) {
+      if (auto F = dyn_cast<Function>(v)) {
+        str += "@" + F->getName().str() + ", ";
+      }
+    }
+    size_t len = str.size();
+    str[len-2] = ' ';
+    str[len-1] = '}';
+    return str;
   }
 
   string getLocAsStr(Instruction* I) {
@@ -290,14 +356,8 @@ public:
     for (auto it: _pts) {
       auto key = it.first;
       auto set = it.second;
-      string funcs = "{ ";
-      for (Value* v: *set) {
-        if (auto F = dyn_cast<Function>(v)) {
-          funcs += "@" + F->getName().str() + ", ";
-        }
-      }
-      funcs += "}";
 
+      string funcs = getSetAsStr(set);
       // todo: this repeats one user forever
       for (auto U: key->users()) {
         if (auto cs = CallSite(U)) {
@@ -317,8 +377,10 @@ public:
 
 
     for (auto& F: M) {
-      //if (F.getName().equals("main")) {
-        doAssignment(F);//}
+      if (_print_propagation) {
+        errs() << "Function: " << F.getName() << "\n";
+      }
+      doAssignment(F);
     }
 
     errs() << "to report\n";
