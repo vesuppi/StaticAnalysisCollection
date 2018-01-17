@@ -151,51 +151,74 @@ public:
     }
   }
 
+  void doAlloca(AllocaInst* I) {
+    getPointToSet(I)->insert(
+        new SpaceValue(I->getAllocatedType()));
+  }
+
+  void doLoad(LoadInst* I) {
+    // Load value from <pointer> to <result>
+    // %2 = load %1
+    // _pts[%2] = { _pts[v] for v in _pts[%1] }
+    Value* result = I;
+    Value* pointer = I->getPointerOperand();
+    if (auto CE = dyn_cast<ConstantExpr>(pointer)) {
+      pointer = CE->getOperand(0);
+    }
+
+    for (auto V: *getPointToSet(pointer)) {
+      addEdge(V, result);
+    }
+  }
+
+  void doStore(StoreInst* I) {
+    // Store <value> to <pointer>
+    Value* value = I->getValueOperand();
+    if (auto CE = dyn_cast<ConstantExpr>(value)) {
+      value = CE->getOperand(0);  // Get the function
+    }
+    Value* pointer = I->getPointerOperand();
+    if (auto CE = dyn_cast<ConstantExpr>(pointer)) {
+      pointer = CE->getOperand(0);  // Get the function
+    }
+
+    for (auto V: *getPointToSet(pointer)) {
+      addEdge(value, V);
+    }
+  }
+
+  void doSelect(SelectInst* I) {
+    Value* v1 = getRealOperand(I, 1);
+    Value* v2 = getRealOperand(I, 2);
+    addEdge(v1, I);
+    addEdge(v2, I);
+  }
+
+  void doGEP(GetElementPtrInst* I) {
+    Value* pointer = I->getPointerOperand();
+    copyPointToSet(pointer, I);
+  }
+
   void doAssignment(Function& F) {
     for (auto& BB: F) {
       for (auto& I: BB) {
-        if (AllocaInst* i = dyn_cast<AllocaInst>(&I)) {
-          getPointToSet(i)->insert(
-              new SpaceValue(i->getAllocatedType()));
+        if (auto i = dyn_cast<AllocaInst>(&I)) {
+          doAlloca(i);
         }
-        else if (LoadInst* i = dyn_cast<LoadInst>(&I)) {
-          // Load value from <pointer> to <result>
-          // %2 = load %1
-          // _pts[%2] = { _pts[v] for v in _pts[%1] }
-          Value* result = i;
-          Value* pointer = i->getPointerOperand();
-          if (auto CE = dyn_cast<ConstantExpr>(pointer)) {
-            pointer = CE->getOperand(0);
-          }
+        else if (auto i = dyn_cast<LoadInst>(&I)) {
+          doLoad(i);
+        }
+        else if (auto i = dyn_cast<StoreInst>(&I)) {
+          doStore(i);
+        }
+        else if (auto i = dyn_cast<SelectInst>(&I)) {
+          doSelect(i);
+        }
+        else if (auto i = dyn_cast<GetElementPtrInst>(&I)) {
+          doGEP(i);
+        }
+        else if (CallSite CS = CallSite(&I)) {
 
-          for (auto V: *getPointToSet(pointer)) {
-            addEdge(V, result);
-          }
-        }
-        else if (StoreInst* i = dyn_cast<StoreInst>(&I)) {
-          // Store <value> to <pointer>
-          Value* value = i->getValueOperand();
-          if (auto CE = dyn_cast<ConstantExpr>(value)) {
-            value = CE->getOperand(0);  // Get the function
-          }
-          Value* pointer = i->getPointerOperand();
-          if (auto CE = dyn_cast<ConstantExpr>(pointer)) {
-            pointer = CE->getOperand(0);  // Get the function
-          }
-
-          for (auto V: *getPointToSet(pointer)) {
-            addEdge(value, V);
-          }
-        }
-        else if (SelectInst* i = dyn_cast<SelectInst>(&I)) {
-          Value* v1 = getRealOperand(i, 1);
-          Value* v2 = getRealOperand(i, 2);
-          addEdge(v1, i);
-          addEdge(v2, i);
-        }
-        else if (GetElementPtrInst* i = dyn_cast<GetElementPtrInst>(&I)) {
-          Value* pointer = i->getPointerOperand();
-          copyPointToSet(pointer, i);
         }
       }
     }
@@ -272,22 +295,11 @@ public:
   bool runOnModule(Module& M) override {
     _m = &M;
     initPts(M);
-    for (auto& F: M) {
-      for (auto& B: F) {
-        errs() << B.getName() << "\n";
-      }
-    }
-    return false;
+
 
     for (auto& F: M) {
-      if (F.getName().equals("main")) {
-        doAssignment(F);}
-    }
-
-    for (auto& F: M) {
-      if (F.getName().equals("main")) {
-        doCall(F);
-      }
+      //if (F.getName().equals("main")) {
+        doAssignment(F);//}
     }
 
     errs() << "to report\n";
