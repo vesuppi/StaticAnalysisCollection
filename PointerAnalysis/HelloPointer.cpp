@@ -58,6 +58,7 @@ public:
   // All points-to sets map
   std::map<Value*, std::set<Value*>*> _pts;
   std::map<Value*, std::set<Value*>*> _graph;
+  std::map<Value*, string> _mem_ref_names;
   int _opt_level = 0;
   bool _print_propagation = true;
 public:
@@ -217,15 +218,17 @@ public:
   }
 
   void doAlloca(AllocaInst* I) {
-    auto stack_space = new MemoryDef(I->getContext(), nullptr, I, I->getParent(), SpaceValue::ID++);
+    auto stack_space = new MemoryDef(I->getContext(), nullptr,
+                                     I, I->getParent(), ++SpaceValue::ID);
     //auto stack_space = new SpaceValue(I->getAllocatedType());
     if (I->hasName()) {
-      stack_space->setName("*"+I->getName());
+      //stack_space->setName("*"+I->getName());
+      _mem_ref_names[stack_space] = "S" + std::to_string(SpaceValue::ID);
     }
 
     getPointToSet(I)->insert(stack_space);
     if (_print_propagation) {
-      printPointsToSet(I);
+      //printPointsToSet(I);
     }
   }
 
@@ -242,6 +245,10 @@ public:
     for (auto V: *getPointToSet(pointer)) {
       addEdge(V, result);
     }
+
+    if (_print_propagation) {
+      printPointsToSet(I);
+    }
   }
 
   void doStore(StoreInst* I) {
@@ -257,6 +264,10 @@ public:
 
     for (auto V: *getPointToSet(pointer)) {
       addEdge(value, V);
+    }
+
+    if (_print_propagation) {
+      printPointeePointsToSet(pointer);
     }
   }
 
@@ -282,6 +293,7 @@ public:
   void doAssignment(Function& F) {
     for (auto& BB: F) {
       for (auto& I: BB) {
+        I.dump();
         if (auto i = dyn_cast<AllocaInst>(&I)) {
           doAlloca(i);
         }
@@ -334,14 +346,41 @@ public:
 
   void printPointsToSet(Value* key) {
     auto set = getPointToSet(key);
-    if (auto I = dyn_cast<Instruction>(key)) {
-      errs() << "[" << I->getFunction()->getName()
-             << "]";
-      key->dump();
-      errs() << "    -> " << getSetAsStr(set)
-             << "\n";
+    errs() << "    | ";
+    if (key->hasName()) {
+      errs() << key->getName();
+    }
+    else {
+      errs() << "this ";
     }
 
+    errs() << "-> " << getSetAsStr(set)
+           << "\n";
+  }
+
+  void printPointeePointsToSet(Value* key) {
+    auto set = getPointeePointsToSet(key);
+    errs() << "    | ";
+    if (key->hasName()) {
+      errs() << key->getName();
+    }
+    else {
+      errs() << "__ ";
+    }
+
+    errs() << "-> &" << getSetAsStr(set)
+           << "\n";
+  }
+
+  std::set<Value*>* getPointeePointsToSet(Value* key) {
+    auto set = new std::set<Value*>();
+    auto pointees = getPointToSet(key);
+    for (auto p: *pointees) {
+      for (auto v: *getPointToSet(p)) {
+        set->insert(v);
+      }
+    }
+    return set;
   }
 
   string getSetAsStr(std::set<Value*>* set) {
@@ -351,7 +390,8 @@ public:
         str += "@" + F->getName().str() + ", ";
       }
       else if (auto M = dyn_cast<MemoryDef>(v)) {
-        str += M->getName().str() + ", ";
+        //str += M->getName().str() + ", ";
+        str += _mem_ref_names[M] + ", ";
       }
     }
     size_t len = str.size();
@@ -405,12 +445,12 @@ public:
 
     for (auto& F: M) {
       if (_print_propagation) {
-        //errs() << "Function: " << F.getName() << "\n";
+        errs() << "Function: " << F.getName() << "\n";
       }
       doAssignment(F);
+
     }
 
-    errs() << "to report\n";
     report();
     return false;
   }
