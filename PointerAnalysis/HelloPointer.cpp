@@ -268,7 +268,6 @@ public:
     for (auto it: _pts) {
       auto key = it.first;
       auto set = it.second;
-      errs() << key << '\n';
       string funcs = "{ ";
       for (Value* v: *set) {
         if (auto F = dyn_cast<Function>(v)) {
@@ -279,8 +278,6 @@ public:
 
       // todo: this repeats one user forever
       for (auto U: key->users()) {
-        errs() << key << " " << U << '\n';
-        U->dump();
         if (auto cs = CallSite(U)) {
           /* Indirect call */
           if (!cs.getCalledFunction()) {
